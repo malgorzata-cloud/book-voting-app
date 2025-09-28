@@ -29,13 +29,25 @@ const upload = multer({ dest: 'uploads/' });
 
 // --- Helpers ---
 function loadBooks() {
-    return fs.existsSync('data/books.json') ? JSON.parse(fs.readFileSync('data/books.json')) : [];
+try {
+       return fs.existsSync('data/books.json') ? JSON.parse(fs.readFileSync('data/books.json')) : [];
+    } catch (err) {
+        console.error('Error loading books.json, resetting to empty array', err);
+        fs.writeFileSync('data/books.json', '[]');
+        return [];
+    }
 }
 function saveBooks(books) {
     fs.writeFileSync('data/books.json', JSON.stringify(books, null, 2));
 }
 function loadVotes() {
-    return fs.existsSync('data/votes.json') ? JSON.parse(fs.readFileSync('data/votes.json')) : {};
+ try {
+        return fs.existsSync('data/votes.json') ? JSON.parse(fs.readFileSync('data/votes.json')) : {};
+    } catch (err) {
+        console.error('Error loading votes.json, resetting to empty object', err);
+        fs.writeFileSync('data/votes.json', '{}');
+        return {};
+    }
 }
 function saveVotes(votes) {
     fs.writeFileSync('data/votes.json', JSON.stringify(votes, null, 2));
