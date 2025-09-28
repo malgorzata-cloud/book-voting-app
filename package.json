@@ -1,0 +1,19 @@
+{
+  "name": "book-voting-app",
+  "version": "1.0.0",
+  "description": "Fantasy book voting app with Excel import and voting results.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "xlsx": "^0.18.5"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

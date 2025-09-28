@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voting Results</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ddd;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #9b59b6;
+            margin-bottom: 20px;
+        }
+        table {
+            margin: 0 auto;
+            border-collapse: collapse;
+            width: 60%;
+        }
+        th, td {
+            padding: 10px 15px;
+            border: 1px solid #444;
+        }
+        th {
+            background-color: #2c2c2c;
+            color: #9b59b6;
+        }
+        td {
+            background-color: #2c2c2c;
+        }
+    </style>
+</head>
+<body>
+    <h1>Voting Results</h1>
+    <table>
+        <tr><th>Book</th><th>Total Points</th></tr>
+        <% for(let book in points) { %>
+            <tr>
+                <td><%= book %></td>
+                <td><%= points[book] || 0 %></td>
+            </tr>
+        <% } %>
+    </table>
+</body>
+</html>

@@ -1,0 +1,127 @@
+const express = require('express');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const cookieParser = require('cookie-parser');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'mypassword';
+
+// Ensure folders & starter files exist (important on fresh deploy)
+if (!fs.existsSync('data')) fs.mkdirSync('data');
+if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
+if (!fs.existsSync('covers')) fs.mkdirSync('covers');
+if (!fs.existsSync('public')) fs.mkdirSync('public');
+
+if (!fs.existsSync('data/books.json')) fs.writeFileSync('data/books.json', '[]');
+if (!fs.existsSync('data/votes.json')) fs.writeFileSync('data/votes.json', '{}');
+
+app.use(express.static('public'));
+app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.set('view engine', 'ejs');
+
+// Multer setup for Excel file
+const upload = multer({ dest: 'uploads/' });
+
+// --- Helpers ---
+function loadBooks() {
+    return fs.existsSync('data/books.json') ? JSON.parse(fs.readFileSync('data/books.json')) : [];
+}
+function saveBooks(books) {
+    fs.writeFileSync('data/books.json', JSON.stringify(books, null, 2));
+}
+function loadVotes() {
+    return fs.existsSync('data/votes.json') ? JSON.parse(fs.readFileSync('data/votes.json')) : {};
+}
+function saveVotes(votes) {
+    fs.writeFileSync('data/votes.json', JSON.stringify(votes, null, 2));
+}
+
+// --- Admin routes ---
+app.get('/admin', (req, res) => {
+    res.render('admin', { message: '' });
+});
+
+app.post('/admin', upload.single('excel'), (req, res) => {
+    const { password } = req.body;
+    if (password !== ADMIN_PASSWORD) {
+        return res.render('admin', { message: '❌ Wrong password!' });
+    }
+    if (!req.file) {
+        return res.render('admin', { message: '⚠️ No file uploaded.' });
+    }
+
+    try {
+        const workbook = XLSX.readFile(req.file.path);
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet);
+
+        // Cover is expected to be a URL or a filename
+        const books = rows.map(row => ({
+            title: row['Title'],
+            author: row['Author'],
+            cover: row['Cover']
+        }));
+
+        saveBooks(books);
+        fs.unlinkSync(req.file.path);
+        res.render('admin', { message: '✅ Books imported successfully!' });
+    } catch (err) {
+        console.error('Import error:', err);
+        res.render('admin', { message: '❌ Error reading Excel file.' });
+    }
+});
+
+// Admin view results
+app.get('/admin/results', (req, res) => {
+    const votes = loadVotes();
+    const books = loadBooks();
+
+    const points = {};
+    books.forEach(b => points[b.title] = 0);
+
+    Object.values(votes).forEach(v => {
+        Object.entries(v).forEach(([book, pts]) => {
+            points[book] += parseInt(pts) || 0;
+        });
+    });
+
+    res.render('results', { points });
+});
+
+// Reset votes (admin)
+app.get('/admin/reset', (req, res) => {
+    fs.writeFileSync('data/votes.json', JSON.stringify({}, null, 2));
+    res.render('admin', { message: '✅ All votes reset!' });
+});
+
+// --- Voting routes ---
+app.get('/', (req, res) => {
+    if (req.cookies.voted) {
+        return res.send('<h2>You have already voted. Thank you!</h2>');
+    }
+    const books = loadBooks();
+    res.render('vote', { books });
+});
+
+app.post('/vote', (req, res) => {
+    if (req.cookies.voted) {
+        return res.send('<h2>You have already voted. Thank you!</h2>');
+    }
+
+    const votes = loadVotes();
+    const voterId = Math.random().toString(36).substring(2, 15);
+    const voteData = req.body;
+
+    votes[voterId] = voteData;
+    saveVotes(votes);
+
+    res.cookie('voted', voterId, { maxAge: 1000 * 60 * 60 * 24 * 365 });
+    res.send('<h2>Thank you for voting!</h2>');
+});
+
+app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
