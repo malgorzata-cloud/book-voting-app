@@ -9,37 +9,38 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'mypassword';
 
-// Ensure folders & starter files exist (important on fresh deploy)
+// --- Step 1: Global crash logging ---
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// --- Step 3: Robust folder & JSON creation ---
 ['data', 'uploads', 'covers', 'public'].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
-
-// Ensure starter JSON files exist
-
 if (!fs.existsSync('data/books.json')) fs.writeFileSync('data/books.json', '[]');
 if (!fs.existsSync('data/votes.json')) fs.writeFileSync('data/votes.json', '{}');
 
+// --- Middleware ---
 app.use(express.static('public'));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
 
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Multer setup for Excel file
+// --- Multer setup for Excel file ---
 const upload = multer({ dest: 'uploads/' });
+
+// --- Vote version (Option 1: automatic cookie reset) ---
+let voteVersion = 1;
 
 // --- Helpers ---
 function loadBooks() {
-try {
-       return fs.existsSync('data/books.json') ? JSON.parse(fs.readFileSync('data/books.json')) : [];
+    try {
+        return fs.existsSync('data/books.json') ? JSON.parse(fs.readFileSync('data/books.json')) : [];
     } catch (err) {
         console.error('Error loading books.json, resetting to empty array', err);
         fs.writeFileSync('data/books.json', '[]');
@@ -50,7 +51,7 @@ function saveBooks(books) {
     fs.writeFileSync('data/books.json', JSON.stringify(books, null, 2));
 }
 function loadVotes() {
- try {
+    try {
         return fs.existsSync('data/votes.json') ? JSON.parse(fs.readFileSync('data/votes.json')) : {};
     } catch (err) {
         console.error('Error loading votes.json, resetting to empty object', err);
@@ -81,11 +82,11 @@ app.post('/admin', upload.single('excel'), (req, res) => {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet);
 
-        // Cover is expected to be a URL or a filename
-         const books = rows.map(row => ({
-        title: row['Title'] || 'Untitled',
-        author: row['Author'] || 'Unknown',
-        cover: row['Cover'] || ''
+        // Safe Excel mapping
+        const books = rows.map(row => ({
+            title: row['Title'] || 'Untitled',
+            author: row['Author'] || 'Unknown',
+            cover: row['Cover'] || ''
         }));
 
         saveBooks(books);
@@ -117,20 +118,24 @@ app.get('/admin/results', (req, res) => {
 // Reset votes (admin)
 app.get('/admin/reset', (req, res) => {
     fs.writeFileSync('data/votes.json', JSON.stringify({}, null, 2));
-    res.render('admin', { message: '✅ All votes reset!' });
+    voteVersion++; // Increment vote version to invalidate old cookies
+    res.render('admin', { message: '✅ All votes reset! Cookies are now cleared for voting.' });
 });
 
 // --- Voting routes ---
 app.get('/', (req, res) => {
-    if (req.cookies.voted) {
+    const votedCookie = req.cookies.voted;
+    if (votedCookie && votedCookie.endsWith(`-${voteVersion}`)) {
         return res.send('<h2>You have already voted. Thank you!</h2>');
     }
+
     const books = loadBooks();
     res.render('vote', { books });
 });
 
 app.post('/vote', (req, res) => {
-    if (req.cookies.voted) {
+    const votedCookie = req.cookies.voted;
+    if (votedCookie && votedCookie.endsWith(`-${voteVersion}`)) {
         return res.send('<h2>You have already voted. Thank you!</h2>');
     }
 
@@ -141,8 +146,10 @@ app.post('/vote', (req, res) => {
     votes[voterId] = voteData;
     saveVotes(votes);
 
-    res.cookie('voted', voterId, { maxAge: 1000 * 60 * 60 * 24 * 365 });
+    // Set cookie with current vote version
+    res.cookie('voted', `${voterId}-${voteVersion}`, { maxAge: 1000 * 60 * 60 * 24 * 365 });
     res.send('<h2>Thank you for voting!</h2>');
 });
 
+// --- Start server ---
 app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
