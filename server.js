@@ -62,6 +62,41 @@ function loadVotes() {
 function saveVotes(votes) {
     fs.writeFileSync('data/votes.json', JSON.stringify(votes, null, 2));
 }
+// --- Import Excel from repo at startup (Option B) ---
+function importExcelIfPresent() {
+    // possible places to keep the Excel file in the repo
+    const repoPaths = ['books.xlsx', 'data/books.xlsx'];
+
+    for (const p of repoPaths) {
+        if (fs.existsSync(p)) {
+            try {
+                const workbook = XLSX.readFile(p);
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet);
+
+                const books = rows.map(row => ({
+                    title: row['Title'] || 'Untitled',
+                    author: row['Author'] || 'Unknown',
+                    cover: row['Cover'] || ''
+                }));
+
+                saveBooks(books);
+                console.log(`Imported ${books.length} books from ${p}`);
+                return true;
+            } catch (err) {
+                console.error(`Error importing Excel from ${p}:`, err);
+            }
+        }
+    }
+    console.log('No repo Excel file found to import.');
+    return false;
+}
+
+// call it once on startup so Render gets the data after deploy
+importExcelIfPresent();
+
+// simple health endpoint for uptime pings
+app.get('/health', (req, res) => res.send('OK'));
 
 // --- Admin routes ---
 app.get('/admin', (req, res) => {
