@@ -10,10 +10,11 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'mypassword';
 
 // Ensure folders & starter files exist (important on fresh deploy)
-if (!fs.existsSync('data')) fs.mkdirSync('data');
-if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
-if (!fs.existsSync('covers')) fs.mkdirSync('covers');
-if (!fs.existsSync('public')) fs.mkdirSync('public');
+['data', 'uploads', 'covers', 'public'].forEach(dir => {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
+// Ensure starter JSON files exist
 
 if (!fs.existsSync('data/books.json')) fs.writeFileSync('data/books.json', '[]');
 if (!fs.existsSync('data/votes.json')) fs.writeFileSync('data/votes.json', '{}');
@@ -23,6 +24,14 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 // Multer setup for Excel file
 const upload = multer({ dest: 'uploads/' });
@@ -73,10 +82,10 @@ app.post('/admin', upload.single('excel'), (req, res) => {
         const rows = XLSX.utils.sheet_to_json(sheet);
 
         // Cover is expected to be a URL or a filename
-        const books = rows.map(row => ({
-            title: row['Title'],
-            author: row['Author'],
-            cover: row['Cover']
+         const books = rows.map(row => ({
+        title: row['Title'] || 'Untitled',
+        author: row['Author'] || 'Unknown',
+        cover: row['Cover'] || ''
         }));
 
         saveBooks(books);
