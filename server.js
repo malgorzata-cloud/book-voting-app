@@ -1,5 +1,4 @@
 const express = require('express');
-const multer = require('multer');
 const XLSX = require('xlsx');
 const cookieParser = require('cookie-parser');
 const fs = require('fs');
@@ -9,155 +8,73 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'mypassword';
 
-// --- Step 1: Global crash logging ---
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-});
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// --- Step 3: Robust folder & JSON creation ---
-['data', 'uploads', 'covers', 'public'].forEach(dir => {
+// ------------------- FOLDERS -------------------
+['data', 'public'].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 if (!fs.existsSync('data/books.json')) fs.writeFileSync('data/books.json', '[]');
 if (!fs.existsSync('data/votes.json')) fs.writeFileSync('data/votes.json', '{}');
 
-// --- Middleware ---
+// ------------------- MIDDLEWARE -------------------
 app.use(express.static('public'));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
 
-// --- Multer setup for Excel file ---
-const upload = multer({ dest: 'uploads/' });
-
-// --- Vote version (Option 1: automatic cookie reset) ---
+// ------------------- COOKIE VERSION -------------------
 let voteVersion = 1;
 
-// --- Helpers ---
+// ------------------- HELPERS -------------------
 function loadBooks() {
-    try {
-        return fs.existsSync('data/books.json') ? JSON.parse(fs.readFileSync('data/books.json')) : [];
-    } catch (err) {
-        console.error('Error loading books.json, resetting to empty array', err);
-        fs.writeFileSync('data/books.json', '[]');
-        return [];
-    }
+    return JSON.parse(fs.readFileSync('data/books.json'));
 }
+
 function saveBooks(books) {
     fs.writeFileSync('data/books.json', JSON.stringify(books, null, 2));
 }
+
 function loadVotes() {
-    try {
-        return fs.existsSync('data/votes.json') ? JSON.parse(fs.readFileSync('data/votes.json')) : {};
-    } catch (err) {
-        console.error('Error loading votes.json, resetting to empty object', err);
-        fs.writeFileSync('data/votes.json', '{}');
-        return {};
-    }
+    return JSON.parse(fs.readFileSync('data/votes.json'));
 }
+
 function saveVotes(votes) {
     fs.writeFileSync('data/votes.json', JSON.stringify(votes, null, 2));
 }
-// --- Import Excel from repo at startup (Option B) ---
+
+// ------------------- IMPORT EXCEL FROM REPO -------------------
 function importExcelIfPresent() {
-    // possible places to keep the Excel file in the repo
     const repoPaths = ['books.xlsx', 'data/books.xlsx'];
 
     for (const p of repoPaths) {
         if (fs.existsSync(p)) {
-            try {
-                const workbook = XLSX.readFile(p);
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(sheet);
+            const workbook = XLSX.readFile(p);
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet);
 
-                const books = rows.map(row => ({
-                    title: row['Title'] || 'Untitled',
-                    author: row['Author'] || 'Unknown',
-                    cover: row['Cover'] || ''
-                }));
+            const books = rows.map(row => ({
+                title: row['Title'] || 'Untitled',
+                author: row['Author'] || 'Unknown',
+                cover: row['Cover'] || ''
+            }));
 
-                saveBooks(books);
-                console.log(`Imported ${books.length} books from ${p}`);
-                return true;
-            } catch (err) {
-                console.error(`Error importing Excel from ${p}:`, err);
-            }
+            saveBooks(books);
+            console.log(`Imported ${books.length} books from ${p}`);
+            return;
         }
     }
-    console.log('No repo Excel file found to import.');
-    return false;
+    console.log('No Excel file found in repo.');
 }
 
-// call it once on startup so Render gets the data after deploy
+// run on startup
 importExcelIfPresent();
 
-// simple health endpoint for uptime pings
+// ------------------- ROUTES -------------------
+
+// health
 app.get('/health', (req, res) => res.send('OK'));
 
-// --- Admin routes ---
-app.get('/admin', (req, res) => {
-    res.render('admin', { message: '' });
-});
-
-app.post('/admin', upload.single('excel'), (req, res) => {
-    const { password } = req.body;
-    if (password !== ADMIN_PASSWORD) {
-        return res.render('admin', { message: '❌ Wrong password!' });
-    }
-    if (!req.file) {
-        return res.render('admin', { message: '⚠️ No file uploaded.' });
-    }
-
-    try {
-        const workbook = XLSX.readFile(req.file.path);
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet);
-
-        // Safe Excel mapping
-        const books = rows.map(row => ({
-            title: row['Title'] || 'Untitled',
-            author: row['Author'] || 'Unknown',
-            cover: row['Cover'] || ''
-        }));
-
-        saveBooks(books);
-        fs.unlinkSync(req.file.path);
-        res.render('admin', { message: '✅ Books imported successfully!' });
-    } catch (err) {
-        console.error('Import error:', err);
-        res.render('admin', { message: '❌ Error reading Excel file.' });
-    }
-});
-
-// Admin view results
-app.get('/admin/results', (req, res) => {
-    const votes = loadVotes();
-    const books = loadBooks();
-
-    const points = {};
-    books.forEach(b => points[b.title] = 0);
-
-    Object.values(votes).forEach(v => {
-        Object.entries(v).forEach(([book, pts]) => {
-            points[book] += parseInt(pts) || 0;
-        });
-    });
-
-    res.render('results', { points });
-});
-
-// Reset votes (admin)
-app.get('/admin/reset', (req, res) => {
-    fs.writeFileSync('data/votes.json', JSON.stringify({}, null, 2));
-    voteVersion++; // Increment vote version to invalidate old cookies
-    res.render('admin', { message: '✅ All votes reset! Cookies are now cleared for voting.' });
-});
-
-// --- Voting routes ---
+// voting page
 app.get('/', (req, res) => {
     const votedCookie = req.cookies.voted;
     if (votedCookie && votedCookie.endsWith(`-${voteVersion}`)) {
@@ -168,23 +85,86 @@ app.get('/', (req, res) => {
     res.render('vote', { books });
 });
 
+// receive vote
 app.post('/vote', (req, res) => {
     const votedCookie = req.cookies.voted;
     if (votedCookie && votedCookie.endsWith(`-${voteVersion}`)) {
         return res.send('<h2>You have already voted. Thank you!</h2>');
     }
 
-    const votes = loadVotes();
-    const voterId = Math.random().toString(36).substring(2, 15);
     const voteData = req.body;
 
-    votes[voterId] = voteData;
+    // SERVER VALIDATION
+    const values = Object.values(voteData).filter(v => v !== '');
+    const counts = { '3': 0, '2': 0, '1': 0 };
+    values.forEach(v => counts[v]++);
+
+    if (counts['3'] !== 1 || counts['2'] !== 1 || counts['1'] !== 1) {
+        return res.send('<h2>Invalid vote. You must assign 3, 2, and 1 exactly once.</h2>');
+    }
+
+    const votes = loadVotes();
+    const voterId = Math.random().toString(36).substring(2, 15);
+
+    votes[voterId] = {
+        time: new Date().toISOString(),
+        votes: voteData
+    };
+
     saveVotes(votes);
 
-    // Set cookie with current vote version
-    res.cookie('voted', `${voterId}-${voteVersion}`, { maxAge: 1000 * 60 * 60 * 24 * 365 });
+    res.cookie('voted', `${voterId}-${voteVersion}`, {
+        maxAge: 1000 * 60 * 60 * 24 * 365
+    });
+
     res.send('<h2>Thank you for voting!</h2>');
 });
 
-// --- Start server ---
-app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+// admin page
+app.get('/admin', (req, res) => {
+    res.render('admin', { message: '' });
+});
+
+// results (password protected)
+app.get('/admin/results', (req, res) => {
+    const { password } = req.query;
+    if (password !== ADMIN_PASSWORD) {
+        return res.send('<h2>Unauthorized</h2>');
+    }
+
+    const votes = loadVotes();
+    const books = loadBooks();
+
+    const points = {};
+    books.forEach(b => points[b.title] = 0);
+
+    Object.values(votes).forEach(v => {
+        Object.entries(v.votes).forEach(([book, pts]) => {
+            points[book] += parseInt(pts) || 0;
+        });
+    });
+
+    const sorted = Object.entries(points)
+        .sort((a, b) => b[1] - a[1]);
+
+    res.render('results', { sorted, votes });
+});
+
+// reset votes (password protected)
+app.post('/admin/reset', (req, res) => {
+    const { password } = req.body;
+
+    if (password !== ADMIN_PASSWORD) {
+        return res.send('<h2>Wrong password</h2>');
+    }
+
+    fs.writeFileSync('data/votes.json', JSON.stringify({}, null, 2));
+    voteVersion++;
+
+    res.send('<h2>Votes reset.</h2><a href="/admin">Back</a>');
+});
+
+// ------------------- START SERVER -------------------
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+});

@@ -19,8 +19,9 @@
             padding: 20px;
             display: inline-block;
             border-radius: 10px;
+            margin-bottom: 20px;
         }
-        input[type="password"], input[type="file"], button {
+        input[type="password"], button {
             display: block;
             margin: 15px auto;
             padding: 10px;
@@ -39,23 +40,26 @@
         a {
             color: #9b59b6;
             text-decoration: none;
+            display: inline-block;
+            margin-top: 10px;
         }
         a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
     <h1>Admin Page - Fantasy Book Club</h1>
+
     <% if (message) { %>
-    <p style="color: lightgreen; font-weight: bold;"><%= message %></p>
-<% } %>
-    <form action="/admin" method="POST" enctype="multipart/form-data">
-        <label>Password: <input type="password" name="password" required></label>
-        <label>Upload Excel: <input type="file" name="excel" accept=".xlsx" required></label>
-        <button type="submit">Import Books</button>
+        <p style="color: lightgreen; font-weight: bold;"><%= message %></p>
+    <% } %>
+
+    <!-- RESET FORM -->
+    <form action="/admin/reset" method="POST">
+        <label>
+            Admin Password:
+            <input type="password" name="password" required>
+        </label>
+        <button type="submit">Reset All Votes</button>
     </form>
-    <br>
-    <a href="/admin/results">View Results</a>
-    <br><br>
-    <a href="/admin/reset" style="display:inline-block; padding:10px 20px; background:#9b59b6; color:#fff; border-radius:5px; text-decoration:none;">Reset Votes</a>
-</body>
-</html>
+
+    <!-- RESULTS LINK -->
