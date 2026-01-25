@@ -43,3 +43,32 @@
     </style>
 </head>
 <body>
+    <h1>Voting Results</h1>
+
+    <% if (sorted.length === 0) { %>
+        <p>No votes yet.</p>
+    <% } else { %>
+        <table>
+            <thead>
+                <tr>
+                    <th>Book</th>
+                    <th>Points</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% sorted.forEach(([title, points]) => { %>
+                    <tr>
+                        <td><%= title %></td>
+                        <td><%= points %></td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+
+        <h2>Raw Votes Data</h2>
+        <pre><%= JSON.stringify(votes, null, 2) %></pre>
+    <% } %>
+
+    <a href="/admin">Back to Admin</a>
+</body>
+</html>
