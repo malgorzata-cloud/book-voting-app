@@ -43,12 +43,13 @@
         .book div {
             text-align: left;
         }
-        select {
+        select, input[type="text"] {
             padding: 5px;
             border-radius: 5px;
             border: none;
             background-color: #444;
             color: #fff;
+            margin-top: 5px;
         }
         button {
             margin-top: 15px;
@@ -68,6 +69,12 @@
 <body>
     <h1>Vote for Your Top 3 Books</h1>
     <form action="/vote" method="POST" id="voteForm">
+        <!-- USERNAME INPUT -->
+        <label>
+            Your Name:
+            <input type="text" name="voterName" id="voterName" required placeholder="Enter a unique name">
+        </label>
+
         <div class="books-container">
             <% books.forEach((book) => { %>
                 <div class="book">
@@ -88,9 +95,8 @@
         <button type="submit">Submit Vote</button>
     </form>
 
-
-
     <script>
+        // ----------- FORM VALIDATION 3-2-1 -----------
         const form = document.getElementById('voteForm');
         form.addEventListener('submit', (e) => {
             const selected = Array.from(form.querySelectorAll('select'))
@@ -101,6 +107,23 @@
             if (counts['3'] !== 1 || counts['2'] !== 1 || counts['1'] !== 1) {
                 e.preventDefault();
                 alert("You must assign 3, 2, and 1 points exactly once each to three different books.");
+            }
+
+            const username = document.getElementById('voterName').value.trim();
+            if (!username) {
+                e.preventDefault();
+                alert("Please enter your name.");
+            } else {
+                // Save to localStorage for next visit
+                localStorage.setItem('voterName', username);
+            }
+        });
+
+        // ----------- AUTO-FILL USERNAME IF RETURNING -----------
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedName = localStorage.getItem('voterName');
+            if (savedName) {
+                document.getElementById('voterName').value = savedName;
             }
         });
     </script>
